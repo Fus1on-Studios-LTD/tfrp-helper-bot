@@ -124,3 +124,29 @@ model AuditLog {
   @@index([action])
   @@index([userId])
 }
+
+model GlobalRoleMapping {
+  id         String   @id @default(cuid())
+  guildId    String
+  key        String
+  roleId     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([guildId, key])
+  @@index([guildId])
+  @@index([key])
+}
+
+model GlobalRoleAssignment {
+  id         String   @id @default(cuid())
+  discordId  String
+  key        String
+  assignedBy String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([discordId, key])
+  @@index([discordId])
+  @@index([key])
+}
