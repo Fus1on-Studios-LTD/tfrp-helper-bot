@@ -104,12 +104,15 @@ model Ticket {
   subject        String?
   createdAt      DateTime @default(now())
   closedAt       DateTime?
+  categoryKey    String?  @default("support")
+  updatedAt      DateTime @default(now()) @updatedAt
 
   user           User     @relation("UserTickets", fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([guildId])
   @@index([userId])
   @@index([status])
+  @@index([creatorId, categoryKey, status])
 }
 
 model AuditLog {

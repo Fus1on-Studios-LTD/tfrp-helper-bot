@@ -8,7 +8,22 @@ const {
 } = require('discord.js');
 const prisma = require('../lib/prisma');
 const env = require('../lib/env');
+const logger = require('../lib/logger');
 const { getOrCreateUser } = require('./userService');
+const { createAuditLog } = require('./auditLogService');
+
+function buildTicketControlRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('ticket:claim')
+      .setLabel('Claim Ticket')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('ticket:close')
+      .setLabel('Close Ticket')
+      .setStyle(ButtonStyle.Danger)
+  );
+}
 
 async function createTicketPanel(channel) {
   const embed = new EmbedBuilder()
@@ -26,22 +41,37 @@ async function createTicketPanel(channel) {
   return channel.send({ embeds: [embed], components: [row] });
 }
 
-async function openTicket(interaction) {
-  const guild = interaction.guild;
-  const member = interaction.member;
-
-  const existing = await prisma.ticket.findFirst({
+async function getOpenTicketCountForCategory(guildId, creatorId, categoryKey) {
+  return prisma.ticket.count({
     where: {
-      guildId: guild.id,
-      creatorId: interaction.user.id,
+      guildId,
+      creatorId,
+      categoryKey,
       status: 'open',
     },
   });
+}
 
-  if (existing) {
+async function openTicket(interaction) {
+  const guild = interaction.guild;
+  const member = interaction.member;
+  const categoryKey = 'support';
+
+  const openCount = await getOpenTicketCountForCategory(guild.id, interaction.user.id, categoryKey);
+  if (openCount > 0) {
+    const existing = await prisma.ticket.findFirst({
+      where: {
+        guildId: guild.id,
+        creatorId: interaction.user.id,
+        categoryKey,
+        status: 'open',
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
     return {
       ok: false,
-      message: `You already have an open ticket: <#${existing.channelId}>`,
+      message: `You already have an open ${categoryKey} ticket: <#${existing.channelId}>`,
     };
   }
 
@@ -62,16 +92,23 @@ async function openTicket(interaction) {
           PermissionFlagsBits.ViewChannel,
           PermissionFlagsBits.SendMessages,
           PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.AttachFiles,
+          PermissionFlagsBits.EmbedLinks,
         ],
       },
       {
         id: guild.members.me.id,
-        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels],
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ManageChannels,
+          PermissionFlagsBits.ReadMessageHistory,
+        ],
       },
     ],
   });
 
-  await prisma.ticket.create({
+  const ticket = await prisma.ticket.create({
     data: {
       guildId: guild.id,
       channelId: channel.id,
@@ -79,19 +116,24 @@ async function openTicket(interaction) {
       creatorId: interaction.user.id,
       status: 'open',
       subject: 'Support Ticket',
+      categoryKey,
     },
   });
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('ticket:close')
-      .setLabel('Close Ticket')
-      .setStyle(ButtonStyle.Danger)
-  );
+  await createAuditLog({
+    guildId: guild.id,
+    action: 'TICKET_CREATED',
+    userId: interaction.user.id,
+    metadata: {
+      ticketId: ticket.id,
+      channelId: channel.id,
+      categoryKey,
+    },
+  });
 
   await channel.send({
     content: `Hello <@${interaction.user.id}>, support will be with you shortly.`,
-    components: [row],
+    components: [buildTicketControlRow()],
   });
 
   return {
@@ -100,10 +142,181 @@ async function openTicket(interaction) {
   };
 }
 
-async function closeTicket(interaction) {
-  const ticket = await prisma.ticket.findUnique({
-    where: { channelId: interaction.channel.id },
+async function getTicketByChannelId(channelId) {
+  return prisma.ticket.findUnique({
+    where: { channelId },
   });
+}
+
+async function claimTicket(interaction) {
+  const ticket = await getTicketByChannelId(interaction.channel.id);
+
+  if (!ticket || ticket.status !== 'open') {
+    return { ok: false, message: 'This channel is not an open ticket.' };
+  }
+
+  if (ticket.claimedById && ticket.claimedById !== interaction.user.id) {
+    return {
+      ok: false,
+      message: `This ticket is already claimed by <@${ticket.claimedById}>.`,
+    };
+  }
+
+  await prisma.ticket.update({
+    where: { channelId: interaction.channel.id },
+    data: {
+      claimedById: interaction.user.id,
+      updatedAt: new Date(),
+    },
+  });
+
+  await createAuditLog({
+    guildId: interaction.guild.id,
+    action: 'TICKET_CLAIMED',
+    userId: interaction.user.id,
+    metadata: {
+      ticketId: ticket.id,
+      channelId: interaction.channel.id,
+    },
+  });
+
+  return { ok: true, message: `Ticket claimed by <@${interaction.user.id}>.` };
+}
+
+async function renameTicket(interaction, name) {
+  const ticket = await getTicketByChannelId(interaction.channel.id);
+
+  if (!ticket || ticket.status !== 'open') {
+    return { ok: false, message: 'This channel is not an open ticket.' };
+  }
+
+  const sanitized = name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').slice(0, 90);
+  await interaction.channel.setName(sanitized);
+
+  await prisma.ticket.update({
+    where: { channelId: interaction.channel.id },
+    data: {
+      subject: name,
+      updatedAt: new Date(),
+    },
+  });
+
+  await createAuditLog({
+    guildId: interaction.guild.id,
+    action: 'TICKET_RENAMED',
+    userId: interaction.user.id,
+    metadata: {
+      ticketId: ticket.id,
+      newName: name,
+      channelName: sanitized,
+    },
+  });
+
+  return { ok: true, message: `Ticket renamed to **${sanitized}**.` };
+}
+
+async function addUserToTicket(interaction, targetUserId) {
+  const ticket = await getTicketByChannelId(interaction.channel.id);
+
+  if (!ticket || ticket.status !== 'open') {
+    return { ok: false, message: 'This channel is not an open ticket.' };
+  }
+
+  const member = await interaction.guild.members.fetch(targetUserId).catch(() => null);
+  if (!member) {
+    return { ok: false, message: 'That user is not in this server.' };
+  }
+
+  await interaction.channel.permissionOverwrites.edit(targetUserId, {
+    ViewChannel: true,
+    SendMessages: true,
+    ReadMessageHistory: true,
+    AttachFiles: true,
+    EmbedLinks: true,
+  });
+
+  await createAuditLog({
+    guildId: interaction.guild.id,
+    action: 'TICKET_USER_ADDED',
+    userId: interaction.user.id,
+    metadata: {
+      ticketId: ticket.id,
+      targetUserId,
+      channelId: interaction.channel.id,
+    },
+  });
+
+  return { ok: true, message: `Added <@${targetUserId}> to this ticket.` };
+}
+
+async function removeUserFromTicket(interaction, targetUserId) {
+  const ticket = await getTicketByChannelId(interaction.channel.id);
+
+  if (!ticket || ticket.status !== 'open') {
+    return { ok: false, message: 'This channel is not an open ticket.' };
+  }
+
+  if (ticket.creatorId === targetUserId) {
+    return { ok: false, message: 'You cannot remove the ticket creator from their own ticket.' };
+  }
+
+  await interaction.channel.permissionOverwrites.delete(targetUserId).catch(() => null);
+
+  await createAuditLog({
+    guildId: interaction.guild.id,
+    action: 'TICKET_USER_REMOVED',
+    userId: interaction.user.id,
+    metadata: {
+      ticketId: ticket.id,
+      targetUserId,
+      channelId: interaction.channel.id,
+    },
+  });
+
+  return { ok: true, message: `Removed <@${targetUserId}> from this ticket.` };
+}
+
+async function buildTranscript(channel) {
+  const messages = await channel.messages.fetch({ limit: 100 });
+  const ordered = [...messages.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+
+  const lines = ordered.map((msg) => {
+    const createdAt = new Date(msg.createdTimestamp).toISOString();
+    const author = `${msg.author.tag} (${msg.author.id})`;
+    const content = msg.content || '[no text content]';
+    return `[${createdAt}] ${author}: ${content}`;
+  });
+
+  return lines.join('\n');
+}
+
+async function sendTranscript(interaction, ticket) {
+  if (!env.TICKET_TRANSCRIPT_CHANNEL_ID) return;
+
+  const transcriptChannel = await interaction.guild.channels.fetch(env.TICKET_TRANSCRIPT_CHANNEL_ID).catch(() => null);
+  if (!transcriptChannel) return;
+
+  const transcript = await buildTranscript(interaction.channel);
+
+  const content = [
+    `**Ticket Transcript**`,
+    `Ticket ID: ${ticket.id}`,
+    `Creator: <@${ticket.creatorId}>`,
+    `Claimed By: ${ticket.claimedById ? `<@${ticket.claimedById}>` : 'Unclaimed'}`,
+    `Closed By: <@${interaction.user.id}>`,
+    '',
+    '```',
+    transcript.slice(0, 1900),
+    '```',
+  ].join('\n');
+
+  await transcriptChannel.send({ content }).catch((error) => {
+    logger.error('Failed to send transcript.', error);
+  });
+}
+
+async function closeTicket(interaction) {
+  const ticket = await getTicketByChannelId(interaction.channel.id);
 
   if (!ticket || ticket.status !== 'open') {
     return {
@@ -117,6 +330,21 @@ async function closeTicket(interaction) {
     data: {
       status: 'closed',
       closedAt: new Date(),
+      updatedAt: new Date(),
+    },
+  });
+
+  await sendTranscript(interaction, ticket);
+
+  await createAuditLog({
+    guildId: interaction.guild.id,
+    action: 'TICKET_CLOSED',
+    userId: interaction.user.id,
+    metadata: {
+      ticketId: ticket.id,
+      channelId: interaction.channel.id,
+      creatorId: ticket.creatorId,
+      claimedById: ticket.claimedById,
     },
   });
 
@@ -135,4 +363,10 @@ module.exports = {
   createTicketPanel,
   openTicket,
   closeTicket,
+  claimTicket,
+  renameTicket,
+  addUserToTicket,
+  removeUserFromTicket,
+  buildTranscript,
+  getTicketByChannelId,
 };

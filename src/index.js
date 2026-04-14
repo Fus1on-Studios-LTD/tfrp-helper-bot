@@ -23,6 +23,14 @@ main().catch(async (error) => {
   process.exit(1);
 });
 
+client.on('error', (error) => {
+  logger.error('Discord client error.', error);
+});
+
+process.on('unhandledRejection', (error) => {
+  logger.error('Unhandled promise rejection.', error);
+});
+
 process.on('SIGINT', async () => {
   logger.warn('Received SIGINT. Shutting down.');
   await prisma.$disconnect().catch(() => null);

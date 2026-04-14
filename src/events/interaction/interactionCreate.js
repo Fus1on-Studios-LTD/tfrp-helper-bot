@@ -1,4 +1,4 @@
-const { openTicket, closeTicket } = require('../../services/ticketService');
+const { openTicket, closeTicket, claimTicket } = require('../../services/ticketService');
 const logger = require('../../lib/logger');
 
 module.exports = {
@@ -19,29 +19,39 @@ module.exports = {
       }
 
       if (interaction.isButton()) {
+        await interaction.deferReply({ ephemeral: true });
+
         if (interaction.customId === 'ticket:create') {
           const result = await openTicket(interaction);
-          return interaction.reply({
+          return interaction.editReply({
             content: result.message,
-            ephemeral: true,
+          });
+        }
+
+        if (interaction.customId === 'ticket:claim') {
+          const result = await claimTicket(interaction);
+          return interaction.editReply({
+            content: result.message,
           });
         }
 
         if (interaction.customId === 'ticket:close') {
           const result = await closeTicket(interaction);
-          return interaction.reply({
+          return interaction.editReply({
             content: result.message,
-            ephemeral: true,
           });
         }
+
+        return interaction.editReply({
+          content: 'Unknown button interaction.',
+        });
       }
     } catch (error) {
       logger.error('Interaction handler failed.', error);
 
       if (interaction.deferred || interaction.replied) {
-        return interaction.followUp({
+        return interaction.editReply({
           content: 'An unexpected error occurred while processing that interaction.',
-          ephemeral: true,
         }).catch(() => null);
       }
 
