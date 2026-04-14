@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model User {
+  id         String             @id @default(cuid())
+  discordId  String             @unique
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  staff      StaffMember?
+  actions    ModerationAction[] @relation("UserModerationActions")
+  tickets    Ticket[]           @relation("UserTickets")
+}
+
+model Guild {
+  id         String       @id
+  name       String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  config     GuildConfig?
+}
+
+model GuildConfig {
+  id                    String   @id @default(cuid())
+  guildId               String   @unique
+  guild                 Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  modLogChannelId       String?
+  ticketCategoryId      String?
+  ticketLogChannelId    String?
+  stickyCooldownMs      Int      @default(15000)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model StaffMember {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  rank       String
+  strikes    Int      @default(0)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model ModerationAction {
+  id             String   @id @default(cuid())
+  userId         String
+  guildId        String?
+  type           String
+  reason         String?
+  moderatorId    String
+  createdAt      DateTime @default(now())
+
+  user           User     @relation("UserModerationActions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([guildId])
+  @@index([type])
+}
+
+model GlobalBan {
+  id             String   @id @default(cuid())
+  discordId      String   @unique
+  reason         String?
+  moderatorId    String
+  createdAt      DateTime @default(now())
+
+  @@index([discordId])
+}
+
+model StickyMessage {
+  id             String   @id @default(cuid())
+  guildId        String
+  channelId      String
+  content        String   @db.Text
+  messageId      String?
+  lastPostedAt   DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([guildId, channelId])
+  @@index([guildId])
+  @@index([channelId])
+}
+
+model Ticket {
+  id             String   @id @default(cuid())
+  guildId        String
+  channelId      String   @unique
+  userId         String
+  creatorId      String
+  status         String   @default("open")
+  claimedById    String?
+  subject        String?
+  createdAt      DateTime @default(now())
+  closedAt       DateTime?
+
+  user           User     @relation("UserTickets", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([guildId])
+  @@index([userId])
+  @@index([status])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  guildId        String?
+  action         String
+  userId         String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  @@index([guildId])
+  @@index([action])
+  @@index([userId])
+}
