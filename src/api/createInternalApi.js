@@ -15,6 +15,7 @@ const createTicketRouter = require('./routes/tickets');
 const createStickyRouter = require('./routes/sticky');
 const createStaffRouter = require('./routes/staff');
 const createSettingsRouter = require('./routes/settings');
+const createModerationRouter = require('./routes/moderation');
 
 function createInternalApi({ prisma, client }) {
   const app = express();
@@ -49,6 +50,7 @@ function createInternalApi({ prisma, client }) {
   app.use('/api', createStickyRouter({ prisma, client }));
   app.use('/api', createStaffRouter({ prisma }));
   app.use('/api', createSettingsRouter({ prisma }));
+  app.use('/api', createModerationRouter({ prisma, client }));
 
   app.use((req, res) => {
     return failure(res, 404, 'Not found', 'NOT_FOUND');
