@@ -31,6 +31,8 @@ model GuildConfig {
   guildId               String   @unique
   guild                 Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
+  roleMap               Json     @default("{}")
+
   modLogChannelId       String?
   ticketCategoryId      String?
   ticketLogChannelId    String?
