@@ -1,5 +1,5 @@
 const express = require('express');
-const { upsertStaff, changeStaffStrikes } = require('../services/staffApiService');
+const { upsertStaff, changeStaffStrikes, removeStaff } = require('../services/staffApiService');
 
 module.exports = function createStaffRouter({ prisma }) {
   const router = express.Router();
@@ -25,6 +25,16 @@ module.exports = function createStaffRouter({ prisma }) {
         actorId,
       });
       res.json({ ok: true, staff });
+    } catch (error) {
+      res.status(400).json({ ok: false, error: error.message });
+    }
+  });
+
+  router.post('/staff/remove', async (req, res) => {
+    try {
+      const { discordId, actorId } = req.body;
+      const removed = await removeStaff({ prisma, discordId, actorId });
+      res.json({ ok: true, removed });
     } catch (error) {
       res.status(400).json({ ok: false, error: error.message });
     }

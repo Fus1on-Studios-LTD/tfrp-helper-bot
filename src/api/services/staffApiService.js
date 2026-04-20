@@ -35,7 +35,9 @@ async function changeStaffStrikes({ prisma, discordId, amount, mode, actorId }) 
     include: { staff: true },
   });
 
-  if (!user?.staff) throw new Error('Staff member not found.');
+  if (!user?.staff) {
+    throw new Error('Staff member not found.');
+  }
 
   const nextStrikes =
     mode === 'remove'
@@ -61,7 +63,33 @@ async function changeStaffStrikes({ prisma, discordId, amount, mode, actorId }) 
   return updated;
 }
 
+async function removeStaff({ prisma, discordId, actorId }) {
+  const user = await prisma.user.findUnique({
+    where: { discordId },
+    include: { staff: true },
+  });
+
+  if (!user?.staff) {
+    throw new Error('Staff member not found.');
+  }
+
+  const removed = await prisma.staffMember.delete({
+    where: { userId: user.id },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      action: 'INTERNAL_API_STAFF_REMOVED',
+      userId: actorId || null,
+      metadata: { discordId, staffId: removed.id },
+    },
+  });
+
+  return removed;
+}
+
 module.exports = {
   upsertStaff,
   changeStaffStrikes,
+  removeStaff,
 };

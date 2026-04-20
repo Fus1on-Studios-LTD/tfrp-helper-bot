@@ -9,6 +9,7 @@ const createHealthRouter = require('./routes/health');
 const createTicketRouter = require('./routes/tickets');
 const createStickyRouter = require('./routes/sticky');
 const createStaffRouter = require('./routes/staff');
+const createSettingsRouter = require('./routes/settings');
 
 function createInternalApi({ prisma, client }) {
   const app = express();
@@ -23,6 +24,7 @@ function createInternalApi({ prisma, client }) {
   app.use('/api', createTicketRouter({ prisma, client }));
   app.use('/api', createStickyRouter({ prisma, client }));
   app.use('/api', createStaffRouter({ prisma }));
+  app.use('/api', createSettingsRouter({ prisma }));
 
   app.use((error, req, res, next) => {
     logger.error('Unhandled internal API error.', error);
