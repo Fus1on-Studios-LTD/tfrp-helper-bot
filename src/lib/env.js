@@ -38,5 +38,12 @@ module.exports = {
   INTERNAL_API_PORT: Number(process.env.INTERNAL_API_PORT || 4600),
   INTERNAL_API_HOST: process.env.INTERNAL_API_HOST || '127.0.0.1',
   INTERNAL_API_SHARED_SECRET: process.env.INTERNAL_API_SHARED_SECRET,
+  INTERNAL_API_SHARED_SECRET_PREVIOUS: process.env.INTERNAL_API_SHARED_SECRET_PREVIOUS || null,
   INTERNAL_API_TRUST_PROXY: String(process.env.INTERNAL_API_TRUST_PROXY || 'false') === 'true',
+  INTERNAL_API_ALLOWED_IPS: (process.env.INTERNAL_API_ALLOWED_IPS || '127.0.0.1,::1')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean),
+  
+  NODE_ENV: process.env.NODE_ENV || 'development',
 };
