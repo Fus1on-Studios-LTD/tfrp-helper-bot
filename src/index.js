@@ -6,6 +6,7 @@ const prisma = require('./lib/prisma');
 const env = require('./lib/env');
 const { loadCommands } = require('./handlers/commandLoader');
 const { loadEvents } = require('./handlers/eventLoader');
+const { startInternalApi } = require('./api/startInternalApi');
 
 async function main() {
   await prisma.$connect();
@@ -15,6 +16,8 @@ async function main() {
   await loadEvents(client);
 
   await client.login(env.DISCORD_TOKEN);
+
+  startInternalApi({ prisma, client });
 }
 
 main().catch(async (error) => {
