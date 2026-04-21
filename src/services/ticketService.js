@@ -7,7 +7,6 @@ const {
   EmbedBuilder,
 } = require('discord.js');
 const prisma = require('../lib/prisma');
-const env = require('../lib/env');
 const logger = require('../lib/logger');
 const { getOrCreateUser } = require('./userService');
 const { createAuditLog } = require('./auditLogService');
@@ -23,6 +22,12 @@ function buildTicketControlRow() {
       .setLabel('Close Ticket')
       .setStyle(ButtonStyle.Danger)
   );
+}
+
+async function getGuildTicketConfig(guildId) {
+  return prisma.guildConfig.findUnique({
+    where: { guildId },
+  });
 }
 
 async function createTicketPanel(channel) {
@@ -57,6 +62,23 @@ async function openTicket(interaction) {
   const member = interaction.member;
   const categoryKey = 'support';
 
+  const guildConfig = await getGuildTicketConfig(guild.id);
+
+  if (!guildConfig?.ticketCategoryId) {
+    return {
+      ok: false,
+      message: 'Ticket system is not configured for this server yet. Set a ticket category in Guild Settings first.',
+    };
+  }
+
+  const parentCategory = await guild.channels.fetch(guildConfig.ticketCategoryId).catch(() => null);
+  if (!parentCategory) {
+    return {
+      ok: false,
+      message: 'The configured ticket category for this server could not be found. Update Guild Settings and try again.',
+    };
+  }
+
   const openCount = await getOpenTicketCountForCategory(guild.id, interaction.user.id, categoryKey);
   if (openCount > 0) {
     const existing = await prisma.ticket.findFirst({
@@ -77,10 +99,15 @@ async function openTicket(interaction) {
 
   const user = await getOrCreateUser(interaction.user.id);
 
+  const safeName = `ticket-${interaction.user.username}`
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '')
+    .slice(0, 90);
+
   const channel = await guild.channels.create({
-    name: `ticket-${interaction.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 90),
+    name: safeName || `ticket-${interaction.user.id}`,
     type: ChannelType.GuildText,
-    parent: env.TICKET_CATEGORY_ID || null,
+    parent: guildConfig.ticketCategoryId,
     permissionOverwrites: [
       {
         id: guild.roles.everyone.id,
@@ -128,6 +155,7 @@ async function openTicket(interaction) {
       ticketId: ticket.id,
       channelId: channel.id,
       categoryKey,
+      ticketCategoryId: guildConfig.ticketCategoryId,
     },
   });
 
@@ -291,16 +319,20 @@ async function buildTranscript(channel) {
 }
 
 async function sendTranscript(interaction, ticket) {
-  if (!env.TICKET_TRANSCRIPT_CHANNEL_ID) return;
+  const guildConfig = await getGuildTicketConfig(interaction.guild.id);
+  const transcriptChannelId = guildConfig?.ticketLogChannelId || null;
 
-  const transcriptChannel = await interaction.guild.channels.fetch(env.TICKET_TRANSCRIPT_CHANNEL_ID).catch(() => null);
-  if (!transcriptChannel) return;
+  if (!transcriptChannelId) return;
+
+  const transcriptChannel = await interaction.guild.channels.fetch(transcriptChannelId).catch(() => null);
+  if (!transcriptChannel || !transcriptChannel.isTextBased()) return;
 
   const transcript = await buildTranscript(interaction.channel);
 
   const content = [
     `**Ticket Transcript**`,
     `Ticket ID: ${ticket.id}`,
+    `Guild: ${interaction.guild.id}`,
     `Creator: <@${ticket.creatorId}>`,
     `Claimed By: ${ticket.claimedById ? `<@${ticket.claimedById}>` : 'Unclaimed'}`,
     `Closed By: <@${interaction.user.id}>`,
@@ -369,4 +401,5 @@ module.exports = {
   removeUserFromTicket,
   buildTranscript,
   getTicketByChannelId,
+  getGuildTicketConfig,
 };

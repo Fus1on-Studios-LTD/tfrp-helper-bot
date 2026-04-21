@@ -15,48 +15,50 @@ module.exports = {
           });
         }
 
-        return command.execute(interaction, client);
+        return await command.execute(interaction, client);
       }
 
       if (interaction.isButton()) {
-        await interaction.deferReply({ ephemeral: true });
+        if (
+          interaction.customId === 'ticket:create' ||
+          interaction.customId === 'ticket:claim' ||
+          interaction.customId === 'ticket:close'
+        ) {
+          await interaction.deferReply({ ephemeral: true });
 
-        if (interaction.customId === 'ticket:create') {
-          const result = await openTicket(interaction);
-          return interaction.editReply({
-            content: result.message,
+          if (interaction.customId === 'ticket:create') {
+            const result = await openTicket(interaction);
+            return await interaction.editReply({ content: result.message });
+          }
+
+          if (interaction.customId === 'ticket:claim') {
+            const result = await claimTicket(interaction);
+            return await interaction.editReply({ content: result.message });
+          }
+
+          if (interaction.customId === 'ticket:close') {
+            const result = await closeTicket(interaction);
+            return await interaction.editReply({ content: result.message });
+          }
+
+          return await interaction.editReply({
+            content: 'Unknown button interaction.',
           });
         }
 
-        if (interaction.customId === 'ticket:claim') {
-          const result = await claimTicket(interaction);
-          return interaction.editReply({
-            content: result.message,
-          });
-        }
-
-        if (interaction.customId === 'ticket:close') {
-          const result = await closeTicket(interaction);
-          return interaction.editReply({
-            content: result.message,
-          });
-        }
-
-        return interaction.editReply({
-          content: 'Unknown button interaction.',
-        });
+        return;
       }
     } catch (error) {
       logger.error('Interaction handler failed.', error);
 
       if (interaction.deferred || interaction.replied) {
         return interaction.editReply({
-          content: 'An unexpected error occurred while processing that interaction.',
+          content: 'An unexpected error occurred.',
         }).catch(() => null);
       }
 
       return interaction.reply({
-        content: 'An unexpected error occurred while processing that interaction.',
+        content: 'An unexpected error occurred.',
         ephemeral: true,
       }).catch(() => null);
     }

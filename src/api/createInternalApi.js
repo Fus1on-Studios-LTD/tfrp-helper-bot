@@ -18,6 +18,7 @@ const createSettingsRouter = require('./routes/settings');
 const createModerationRouter = require('./routes/moderation');
 const createNetworkAuthRouter = require('./routes/networkAuth');
 const createNetworkSyncRouter = require('./routes/networkSync');
+const createNetworkRulesRouter = require('./routes/networkRules');
 
 function createInternalApi({ prisma, client }) {
   const app = express();
@@ -56,6 +57,7 @@ function createInternalApi({ prisma, client }) {
   app.use('/api', createSettingsRouter({ prisma }));
   app.use('/api', createModerationRouter({ prisma, client }));
   app.use('/api', createNetworkSyncRouter());
+  app.use('/api', createNetworkRulesRouter({ prisma }));
 
   app.use((req, res) => {
     return failure(res, 404, 'Not found', 'NOT_FOUND');
