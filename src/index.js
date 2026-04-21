@@ -7,6 +7,7 @@ const env = require('./lib/env');
 const { loadCommands } = require('./handlers/commandLoader');
 const { loadEvents } = require('./handlers/eventLoader');
 const { startInternalApi } = require('./api/startInternalApi');
+const { startNetworkAutoJoinService } = require('./services/networkSyncService');
 
 async function main() {
   await prisma.$connect();
@@ -18,6 +19,7 @@ async function main() {
   await client.login(env.DISCORD_TOKEN);
 
   startInternalApi({ prisma, client });
+  startNetworkAutoJoinService();
 }
 
 main().catch(async (error) => {

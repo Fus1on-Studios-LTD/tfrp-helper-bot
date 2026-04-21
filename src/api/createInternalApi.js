@@ -16,6 +16,8 @@ const createStickyRouter = require('./routes/sticky');
 const createStaffRouter = require('./routes/staff');
 const createSettingsRouter = require('./routes/settings');
 const createModerationRouter = require('./routes/moderation');
+const createNetworkAuthRouter = require('./routes/networkAuth');
+const createNetworkSyncRouter = require('./routes/networkSync');
 
 function createInternalApi({ prisma, client }) {
   const app = express();
@@ -42,6 +44,8 @@ function createInternalApi({ prisma, client }) {
 
   app.use(createHealthRouter());
 
+  app.use('/api', createNetworkAuthRouter());
+
   app.use(restrictInternalApiIp);
   app.use(rateLimitInternalApi);
   app.use(authenticateApi);
@@ -51,6 +55,7 @@ function createInternalApi({ prisma, client }) {
   app.use('/api', createStaffRouter({ prisma }));
   app.use('/api', createSettingsRouter({ prisma }));
   app.use('/api', createModerationRouter({ prisma, client }));
+  app.use('/api', createNetworkSyncRouter());
 
   app.use((req, res) => {
     return failure(res, 404, 'Not found', 'NOT_FOUND');

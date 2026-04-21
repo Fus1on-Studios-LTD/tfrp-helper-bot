@@ -155,3 +155,45 @@ model GlobalRoleAssignment {
   @@index([discordId])
   @@index([key])
 }
+
+model LinkedDiscordAccount {
+  id                    String    @id @default(cuid())
+  discordId             String    @unique
+  accessTokenEncrypted  String    @db.Text
+  refreshTokenEncrypted String?   @db.Text
+  tokenType             String?
+  scope                 String?
+  expiresAt             DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([discordId])
+}
+
+model NetworkLinkSession {
+  id          String    @id @default(cuid())
+  state       String    @unique
+  discordId   String
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  completedAt DateTime?
+
+  @@index([discordId])
+  @@index([expiresAt])
+}
+
+model NetworkSyncRule {
+  id            String   @id @default(cuid())
+  enabled       Boolean  @default(true)
+  sourceGuildId String
+  sourceRoleId  String
+  targetGuildId String
+  globalRoleKey String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([sourceGuildId])
+  @@index([targetGuildId])
+  @@index([enabled])
+  @@unique([sourceGuildId, sourceRoleId, targetGuildId])
+}

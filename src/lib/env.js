@@ -20,6 +20,7 @@ for (const key of required) {
 module.exports = {
   DISCORD_TOKEN: process.env.DISCORD_TOKEN,
   DISCORD_CLIENT_ID: process.env.DISCORD_CLIENT_ID,
+  DISCORD_CLIENT_SECRET: process.env.DISCORD_CLIENT_SECRET,
   DISCORD_TEST_GUILD_ID: process.env.DISCORD_TEST_GUILD_ID || null,
 
   DB_HOST: process.env.DB_HOST,
@@ -46,4 +47,7 @@ module.exports = {
   .filter(Boolean),
   
   NODE_ENV: process.env.NODE_ENV || 'development',
+  NETWORK_OAUTH_REDIRECT_URI: process.env.NETWORK_OAUTH_REDIRECT_URI,
+  NETWORK_TOKEN_ENCRYPTION_KEY: process.env.NETWORK_TOKEN_ENCRYPTION_KEY,
+  NETWORK_SYNC_INTERVAL_MS: Number(process.env.NETWORK_SYNC_INTERVAL_MS || 600000),
 };
