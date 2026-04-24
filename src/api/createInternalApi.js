@@ -20,6 +20,7 @@ const createNetworkAuthRouter = require('./routes/networkAuth');
 const createNetworkSyncRouter = require('./routes/networkSync');
 const createNetworkRulesRouter = require('./routes/networkRules');
 const createGlobalRoleMappingsRouter = require('./routes/globalRoleMappings');
+const createDiscordRolesRouter = require('./routes/discordRoles');
 
 function createInternalApi({ prisma, client }) {
   const app = express();
@@ -60,6 +61,7 @@ function createInternalApi({ prisma, client }) {
   app.use('/api', createNetworkSyncRouter());
   app.use('/api', createNetworkRulesRouter({ prisma }));
   app.use('/api', createGlobalRoleMappingsRouter({ prisma }));
+  app.use('/api', createDiscordRolesRouter({ client }));
 
   app.use((req, res) => {
     return failure(res, 404, 'Not found', 'NOT_FOUND');
